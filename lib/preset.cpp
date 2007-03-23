@@ -11,7 +11,7 @@
 
 #include "preset.h"
 #include "metronome.h"
-#include "string_split.h"
+#include "util/string_split.h"
 #include "util/fs.h"
 #include "util/ms_time.h"
 #include "util/to_string.h"
@@ -166,7 +166,7 @@ static void parse(tempo_data &data, xmlDocPtr doc, xmlNodePtr cur)
 {
 	xmlChar *s;
 	if((s = xmlGetProp(cur, (const xmlChar *)"start"))){
-		std::deque<int> l = split((const char *)s);
+		std::deque<int> l = split_int((const char *)s);
 		if(l.size() >= 1) data.when.bar = l[0];
 		if(l.size() >= 2) data.when.beat = l[1];
 		if(l.size() >= 3) data.when.tick = l[2];
@@ -177,7 +177,7 @@ static void parse(tempo_data &data, xmlDocPtr doc, xmlNodePtr cur)
 		xmlFree(s);
 	}
 	if((s = xmlGetProp(cur, (const xmlChar *)"signature"))){
-		std::deque<int> l = split((const char *)s);
+		std::deque<int> l = split_int((const char *)s);
 		if(l.size() >= 1) data.beatsperbar = l[0];
 		if(l.size() >= 2) data.notetype = l[1];
 		xmlFree(s);
@@ -332,6 +332,10 @@ void preset::read()
 
 	metronome *metro = obj->get_metronome();
 	metro->clear();
+
+	midi_engine *midi = obj->get_midi_engine();
+	midi->set_name(data.config.client_name);
+	midi->initialize();
 
 	audio_engine *audio =  obj->get_audio_engine();
 	audio->set_name(data.config.client_name);

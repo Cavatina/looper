@@ -4,7 +4,7 @@
 #include <deque>
 #include <string>
 
-inline std::deque<int> split(const std::string &s)
+inline std::deque<int> split_int(const std::string &s)
 {
 	std::deque<int> n;
 	const char *p = s.c_str();

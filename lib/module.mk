@@ -3,6 +3,7 @@ SRC += lib/preset.cpp lib/audio_engine.cpp lib/midi_engine.cpp
 SRC += lib/metronome.cpp
 SRC += lib/util/fs.cpp
 SRC += lib/util/ms_time.cpp
+SRC += lib/util/debug.c
 
 LIBS += -lxml2
 

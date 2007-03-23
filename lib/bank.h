@@ -28,6 +28,8 @@ public:
 
 	void set_name(const std::string &name_);
 	std::string get_name() const { return name; }
+
+	void set_index(size_t index_) { index = index_; }
 	// Implicit by samples? => no, decided by input channels,
 	// but should allow samples with less channels.
 	void set_channels(unsigned short);
@@ -57,6 +59,7 @@ private:
 
 	unsigned short loops_to_play;
 	std::string name;
+	size_t index;
 };
 
 #endif

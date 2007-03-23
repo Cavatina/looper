@@ -1,5 +1,8 @@
 #include "bank.h"
 
+#include <iostream>
+
+#include "util/debug.h"
 
 void bank::play()
 {

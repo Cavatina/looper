@@ -352,6 +352,7 @@ void preset::read()
 	for(; i != data.banks.end(); ++i){
 		unsigned short channels = i->input.size();
 		bank *b = obj->get_bank(i->index);
+		b->set_index(i->index);
 		b->set_name(i->name);
 		i->sources.sort();
 		std::list<source_data>::const_iterator j = i->sources.begin();

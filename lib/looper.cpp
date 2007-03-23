@@ -1,5 +1,10 @@
 #include "looper.h"
 
+#include <iostream>
+#include <stdexcept>
+
+#include "command.h"
+
 void looper::set_banks(size_t new_size)
 {
 	while(new_size > banks.size()){
@@ -54,6 +59,14 @@ void looper::initialize()
 void looper::run()
 {
 	while(1){
+		try {
+			command *c = command_parse(this, "bank:1:stop");
+			c->execute();
+			delete c;
+		}
+		catch(const command::error &e){
+			std::cerr << e.what() << std::endl;
+		}
 		sleep(1);
 	}
 }

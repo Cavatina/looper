@@ -68,7 +68,7 @@ std::string fs::get_directory_part(const std::string &path)
 	else if((s = path.find_last_of("\\")) != string::npos)
 		return path.substr(0, s);
 	else
-		return path;
+		return "";
 }
 
 std::string fs::get_filename_part(const std::string &path)

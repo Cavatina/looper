@@ -53,7 +53,9 @@ void looper::initialize()
 
 void looper::run()
 {
-
+	while(1){
+		sleep(1);
+	}
 }
 
 void looper::shutdown()
@@ -61,4 +63,5 @@ void looper::shutdown()
 	set_banks(0);
 	storage.reset(0); // Force a save() if dirty...
 	audio.reset(0);
+	midi.reset(0);
 }

@@ -19,16 +19,16 @@
 static const char *default_xml =
 "<?xml version=\"1.0\"?>"
 "<looper>"
-"  <config>"
-"   <client-name>looper</client-name>"
-"  </config>"
-"  <banks>"
-"   <bank index=\"0\" name=\"Bank0\"/>"
-"   <bank index=\"1\" name=\"Bank1\"/>"
-"   <bank index=\"2\" name=\"Bank2\"/>"
-"   <bank index=\"3\" name=\"Bank3\"/>"
-"  </banks>"
-" </looper>";
+" <config>"
+"  <client-name>looper</client-name>"
+" </config>"
+" <banks>"
+"  <bank index=\"1\" name=\"Bank 1\"/>"
+"  <bank index=\"2\" name=\"Bank 2\"/>"
+"  <bank index=\"3\" name=\"Bank 3\"/>"
+"  <bank index=\"4\" name=\"Bank 4\"/>"
+" </banks>"
+"</looper>";
 
 preset::~preset()
 {
@@ -39,6 +39,9 @@ preset::~preset()
 void preset::init_doc()
 {
 	if(!doc){
+		// TODO: Handle opening a .looper directory.
+		// (source = directory with a source.looper file in it)
+
 		if(!get_source().size()) throw no_file(this);
 		doc = xmlParseFile(get_source().c_str());
 		// On failure, check if file exists.
@@ -56,6 +59,10 @@ void preset::init_doc()
 			doc = xmlParseFile(def.c_str());
 			if(!doc){
 				doc = xmlParseDoc(BAD_CAST default_xml);
+			}
+			if(doc){
+				mark_dirty();
+				has_backup = true;
 			}
 		}
 	}
@@ -284,8 +291,8 @@ void preset::make_backup()
 	if(has_backup) return;
 	std::string p;
 	p = fs::make_absolute_path(fs::get_directory_part(get_source()))
-		+ "/" + get_source() + "." +
-		ms_time::datetime::now().strftime(".%F.backup");
+		+ "/backup/" + get_source() +
+		ms_time::datetime::now().strftime(".%F_%H-%M-%S.backup");
 	fs::mkpath(p);
 	rename(get_source().c_str(), p.c_str());
 	has_backup = true;
@@ -315,7 +322,7 @@ void preset::read()
 			while(b != 0){
 				if(!xmlStrcmp(b->name, BAD_CAST "bank")){
 					data.banks.push_back(bank_data());
-					parse(data.banks.back(), doc, cur);
+					parse(data.banks.back(), doc, b);
 				}
 				b = b->next;
 			}
@@ -416,8 +423,6 @@ void preset::save()
 
 	looper_data data;
 
-
-
 	xmlNodePtr root = xmlDocGetRootElement(doc);
 	if(!root) throw file_error(this);
 
@@ -442,7 +447,7 @@ void preset::save()
 
 		// TODO: Update input channels
 
-		for(size_t si; si<=b->get_sample_count(); ++si){
+		for(size_t si=1; si<=b->get_sample_count(); ++si){
 			sample *s = b->get_sample(si);
 			xmlNodePtr xs;
 			xs = xml_find_or_create(xb, BAD_CAST "source", si);

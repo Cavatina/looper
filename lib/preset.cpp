@@ -78,6 +78,8 @@ void preset::close_doc()
 
 struct connector_data
 {
+	connector_data() : channel(-1) {}
+
 	int channel;
 	std::string name;
 	std::string connect;
@@ -98,9 +100,23 @@ struct metronome_data
 	std::list<tempo_data> tempo;
 };
 
+struct midi_handler_data
+{
+	midi_handler_data() : controller(-1), param(-1), note(-1) {}
+
+	int controller;
+	int param;
+	int note;
+	std::string command;
+};
+
 struct midi_data
 {
+	midi_data() : channel(-1) {}
+
+	int channel;
 	std::list<connector_data> input;
+	std::list<midi_handler_data> handlers;
 };
 
 struct audio_data
@@ -134,13 +150,42 @@ static void parse(connector_data &data, xmlDocPtr doc, xmlNodePtr cur)
 	}
 }
 
+static void parse(midi_handler_data &data, xmlDocPtr doc, xmlNodePtr cur)
+{
+	xmlChar *s;
+	if((s = xmlGetProp(cur, (const xmlChar *)"controller"))){
+		data.controller = atoi((const char*)s);
+		xmlFree(s);
+	}
+	if((s = xmlGetProp(cur, (const xmlChar *)"param"))){
+		data.param = atoi((const char*)s);
+		xmlFree(s);
+	}
+	if((s = xmlGetProp(cur, (const xmlChar *)"note"))){
+		data.note = atoi((const char*)s);
+		xmlFree(s);
+	}
+	s = xmlNodeListGetString(doc, cur->xmlChildrenNode, 1);
+	data.command = (const char*)s;
+	xmlFree(s);
+}
+
 static void parse(midi_data &data, xmlDocPtr doc, xmlNodePtr cur)
 {
+	xmlChar *s;
+	if((s = xmlGetProp(cur, (const xmlChar *)"channel"))){
+		data.channel = atoi((const char*)s);
+		xmlFree(s);
+	}
 	cur = cur->xmlChildrenNode;
 	while(cur != 0){
 		if(!xmlStrcmp(cur->name, (const xmlChar *)"input")){
 			data.input.push_back(connector_data());
 			parse(data.input.back(), doc, cur);
+		}
+		else if(!xmlStrcmp(cur->name, (const xmlChar *)"handler")){
+			data.handlers.push_back(midi_handler_data());
+			parse(data.handlers.back(), doc, cur);
 		}
 		cur = cur->next;
 	}
@@ -333,10 +378,11 @@ void preset::read()
 	metronome *metro = obj->get_metronome();
 	metro->clear();
 
-	midi_engine *midi = obj->get_midi_engine();
-	midi->set_name(data.config.client_name);
-	midi->initialize();
-
+	std::list<tempo_data>::iterator j = data.config.metro.tempo.begin();
+	for(; j != data.config.metro.tempo.end(); ++j){
+		metro->add(tempo(j->when, j->bpm, j->beatsperbar,
+				 j->notetype));
+	}
 	audio_engine *audio =  obj->get_audio_engine();
 	audio->set_name(data.config.client_name);
 	audio->initialize();
@@ -379,17 +425,35 @@ void preset::read()
 		for(; k != i->input.end(); ++k){
 			input_channel *c = new input_channel(b);
 			c->set_name(k->name);
-			c->set_index(k->channel);
+			if(k->channel >= 0) c->set_index(k->channel);
 			c->set_connect(k->connect);
 			b->add_channel(c);
 			audio->register_channel(c);
 		}
 	}
 
-	std::list<tempo_data>::iterator j = data.config.metro.tempo.begin();
-	for(; j != data.config.metro.tempo.end(); ++j){
-		metro->add(tempo(j->when, j->bpm, j->beatsperbar,
-				 j->notetype));
+	midi_engine *midi = obj->get_midi_engine();
+	midi->set_name(data.config.client_name);
+	midi->initialize();
+
+	if(data.config.midi.channel >= 0){
+		midi->set_channel(data.config.midi.channel);
+	}
+	std::list<connector_data>::const_iterator k;
+	k = data.config.midi.input.begin();
+	for(; k != data.config.midi.input.end(); ++k){
+		midi->input_connect(k->connect);
+	}
+
+	std::list<midi_handler_data>::const_iterator l;
+	l = data.config.midi.handlers.begin();
+	for(; l != data.config.midi.handlers.end(); ++l){
+		command *c = command_parse(obj, l->command);
+		midi_handler *m = new midi_handler(c);
+		if(l->controller >= 0) m->set_controller(l->controller);
+		if(l->param >= 0) m->set_param(l->param);
+		if(l->note >= 0) m->set_note(l->note);
+		midi->add(m);
 	}
 }
 

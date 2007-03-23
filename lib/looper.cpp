@@ -3,6 +3,8 @@
 #include <iostream>
 #include <stdexcept>
 
+#include <unistd.h>
+
 #include "command.h"
 
 void looper::set_banks(size_t new_size)
@@ -60,14 +62,12 @@ void looper::run()
 {
 	while(1){
 		try {
-			command *c = command_parse(this, "bank:1:stop");
-			c->execute();
-			delete c;
+			if(midi.get()) midi->dispatch();
 		}
 		catch(const command::error &e){
 			std::cerr << e.what() << std::endl;
 		}
-		sleep(1);
+		usleep(10000);
 	}
 }
 

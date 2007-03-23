@@ -70,6 +70,7 @@ bank_command::bank_command(looper *l,
 
 void bank_command::execute()
 {
-	DBG2(std::cerr<<"execute bank:"<<index<<":"<<method<<std::endl);
+	DBG2(std::cerr<<"command: execute [bank:"<<index<<":"<<method<<"]"
+	     <<std::endl);
 	CALL_MEMBER_FN(obj, fn)();
 }

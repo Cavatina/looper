@@ -2,7 +2,13 @@
 
 void looper::set_banks(size_t new_size)
 {
-	
+	while(new_size > banks.size()){
+		banks.push_back(new bank());
+	}
+	if(new_size < banks.size()){
+		for(size_t i=new_size; i<banks.size(); ++i) delete banks[i];
+		banks.resize(new_size);
+	}
 }
 
 void looper::set_persistent_storage(persistent_storage *s)
@@ -13,6 +19,11 @@ void looper::set_persistent_storage(persistent_storage *s)
 void looper::set_audio_engine(audio_engine *e)
 {
 	audio.reset(e);
+}
+
+void looper::set_midi_engine(midi_engine *e)
+{
+	midi.reset(e);
 }
 
 void looper::read_storage()
@@ -28,7 +39,7 @@ void looper::dirty()
 bank *looper::get_bank(size_t index)
 {
 	if(index > 0 && index <= banks.size()){
-		return banks[index];
+		return banks[index-1];
 	}
 	else {
 		return 0;
@@ -37,7 +48,7 @@ bank *looper::get_bank(size_t index)
 
 void looper::initialize()
 {
-
+	read_storage();
 }
 
 void looper::run()
@@ -47,6 +58,7 @@ void looper::run()
 
 void looper::shutdown()
 {
+	set_banks(0);
 	storage.reset(0); // Force a save() if dirty...
 	audio.reset(0);
 }

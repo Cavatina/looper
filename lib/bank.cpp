@@ -44,8 +44,14 @@ void bank::set_channels(unsigned short)
 {
 }
 
-void bank::add_sample(sample *)
+void bank::add_sample(sample *s)
 {
+	samples.push_back(s);
+}
+
+void bank::add_channel(channel *c)
+{
+	channels.push_back(c);
 }
 
 sample *bank::get_sample(unsigned short)

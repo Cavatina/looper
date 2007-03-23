@@ -30,6 +30,7 @@ int main(int argc, char *argv[])
 
 
 	try {
+		app.set_midi_engine(new midi_engine());
 		app.set_audio_engine(new audio_engine());
 		app.set_persistent_storage(new preset(fname, &app));
 		app.initialize();

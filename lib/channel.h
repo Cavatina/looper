@@ -9,8 +9,10 @@ public:
 	channel(bank *bank_) : bankref(bank_) {}
 	virtual ~channel() {}
 
-	void set_name(const std::string &);
-	void set_index(unsigned short);
+	void set_name(const std::string &name_) { name = name_; }
+	void set_connect(const std::string &connect_) { connect = connect_; }
+	// deprecated?
+	void set_index(unsigned short index_) { index = index_; }
 
 	// Take into account that sample channels might be less
 	// than what we want...
@@ -21,11 +23,16 @@ public:
 
 private:
 	bank *bankref;
+	std::string name;
+	std::string connect;
+	unsigned short index;
 };
 
 class input_channel : public channel
 {
 public:
+	input_channel(bank *bank_) : channel(bank_) {}
+	virtual ~input_channel() {}
 	// TODO: Howto merge several channels... :S
 	// TODO: Write along as we go should be the "right thing to do"
 	// to avoid excess "XRUN"s...
@@ -37,6 +44,9 @@ public:
 class output_channel : public channel
 {
 public:
+	output_channel(bank *bank_) : channel(bank_) {}
+	virtual ~output_channel() {}
+
 	virtual bool is_output() const { return true; }
 };
 

@@ -1,4 +1,4 @@
-targets := looper
+targets = looper
 
 MODULES := lib util
 CFLAGS := -O2 -ggdb -Wall -pedantic $(EXTRACFLAGS)
@@ -7,6 +7,9 @@ CFLAGS += $(patsubst %, -I%, $(MODULES))
 ALL_OBJ :=
 LIBS :=
 SRC := main.c
+
+.PHONY:	all clean
+all:	$(targets)
 
 -include $(patsubst %, %/module.mk, $(MODULES))
 #-include $(shell find . -mindepth 1 -maxdepth 3 -name module.mk)
@@ -29,9 +32,6 @@ SHELL = /bin/sh
 INSTALL = install
 INSTALL_PROGRAM = $(INSTALL) #-s
 INSTALL_DATA = $(INSTALL)
-
-.PHONY:	all clean
-all:	$(targets)
 
 looper: $(OBJ)
 	@$(LINK.o) $(LDFLAGS) $(OBJ) -o $@

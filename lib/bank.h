@@ -30,6 +30,7 @@ public:
 	// Implicit by samples? => no, decided by input channels,
 	// but should allow samples with less channels.
 	void set_channels(unsigned short);
+	void add_channel(channel *);
 	void add_sample(sample *);
 
 	sample *get_sample(unsigned short);

@@ -1,6 +1,6 @@
 targets = looper
 
-MODULES := lib util
+MODULES := lib util lib/util
 CFLAGS := -O2 -ggdb -Wall -pedantic $(EXTRACFLAGS)
 CFLAGS += $(patsubst %, -I%, $(MODULES))
 

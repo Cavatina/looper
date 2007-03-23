@@ -26,7 +26,8 @@ public:
 	void play_times(unsigned short);
 
 
-	void set_name(const std::string &);
+	void set_name(const std::string &name_);
+	std::string get_name() const { return name; }
 	// Implicit by samples? => no, decided by input channels,
 	// but should allow samples with less channels.
 	void set_channels(unsigned short);
@@ -36,6 +37,7 @@ public:
 	sample *get_sample(unsigned short);
 	sample *get_current_sample();
 	unsigned short get_sample_index(sample *) const;
+	unsigned short get_sample_count() const;
 	void set_sample_index(sample *, unsigned short);
 	void remove_sample(sample *);
 
@@ -54,7 +56,7 @@ private:
 	std::deque<channel *> channels;
 
 	unsigned short loops_to_play;
-		
+	std::string name;
 };
 
 #endif

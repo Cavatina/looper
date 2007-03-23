@@ -17,6 +17,9 @@ public:
 	virtual void read() = 0;
 	virtual void save() = 0;
 
+protected:
+	void clear_dirty() { dirty = false; }
+
 private:
 	std::string source;
 	bool dirty;

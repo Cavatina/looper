@@ -34,8 +34,9 @@ void bank::play_times(unsigned short)
 {
 }
 
-void bank::set_name(const std::string &)
+void bank::set_name(const std::string &name_)
 {
+	name = name_;
 }
 
 // Implicit by samples? => no, decided by input channels,
@@ -67,6 +68,11 @@ sample *bank::get_current_sample()
 unsigned short bank::get_sample_index(sample *) const
 {
 	return 0;
+}
+
+unsigned short bank::get_sample_count() const
+{
+	return samples.size();
 }
 
 void bank::set_sample_index(sample *, unsigned short)

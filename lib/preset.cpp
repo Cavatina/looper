@@ -5,9 +5,69 @@
 #include <list>
 #include <iostream>
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 #include "preset.h"
 #include "metronome.h"
 #include "string_split.h"
+#include "util/fs.h"
+#include "util/ms_time.h"
+#include "util/to_string.h"
+
+static const char *default_xml =
+"<?xml version=\"1.0\"?>"
+"<looper>"
+"  <config>"
+"   <client-name>looper</client-name>"
+"  </config>"
+"  <banks>"
+"   <bank index=\"0\" name=\"Bank0\"/>"
+"   <bank index=\"1\" name=\"Bank1\"/>"
+"   <bank index=\"2\" name=\"Bank2\"/>"
+"   <bank index=\"3\" name=\"Bank3\"/>"
+"  </banks>"
+" </looper>";
+
+preset::~preset()
+{
+	if(is_dirty()) save();
+	close_doc();
+}
+
+void preset::init_doc()
+{
+	if(!doc){
+		if(!get_source().size()) throw no_file(this);
+		doc = xmlParseFile(get_source().c_str());
+		// On failure, check if file exists.
+		// If it does, then throw a fatal exception.
+		// Otherwise, initialize a new document.
+		if(!doc){
+			int fd;
+			fd = open(get_source().c_str(), O_RDONLY);
+			if(fd != -1){
+				close(fd);
+				throw file_error(this);
+			}
+			std::string def(getenv("HOME"));
+			def += "/.looper/default.looper";
+			doc = xmlParseFile(def.c_str());
+			if(!doc){
+				doc = xmlParseDoc(BAD_CAST default_xml);
+			}
+		}
+	}
+}
+
+void preset::close_doc()
+{
+	if(doc){
+		xmlFreeDoc(doc);
+		doc = 0;
+	}
+}
 
 struct connector_data
 {
@@ -221,44 +281,47 @@ struct looper_data
 
 void preset::make_backup()
 {
-
+	if(has_backup) return;
+	std::string p;
+	p = fs::make_absolute_path(fs::get_directory_part(get_source()))
+		+ "/" + get_source() + "." +
+		ms_time::datetime::now().strftime(".%F.backup");
+	fs::mkpath(p);
+	rename(get_source().c_str(), p.c_str());
+	has_backup = true;
 }
 
 void preset::read()
 {
+	init_doc();
 	if(is_dirty()) save();
 
-	xmlDocPtr doc;
 	xmlNodePtr cur;
-
-	doc = xmlParseFile(get_source().c_str());
-	if(!doc) throw file_error(this);
-
 	cur = xmlDocGetRootElement(doc);
-	if(!cur){
-		xmlFreeDoc(doc);
-		throw file_error(this);
-	}
+	if(!cur) throw file_error(this);
 
 	if(xmlStrcmp(cur->name, (const xmlChar *)"looper")){
-		xmlFreeDoc(doc);
 		throw format_error(this);
 	}
 
 	looper_data data;
 	cur = cur->xmlChildrenNode;
 	while(cur != 0){
-		if(xmlStrcmp(cur->name, (const xmlChar *)"config") == 0){
+		if(!xmlStrcmp(cur->name, (const xmlChar *)"config")){
 			parse(data.config, doc, cur);
 		}
-		else if(xmlStrcmp(cur->name, (const xmlChar *)"bank") == 0){
-			data.banks.push_back(bank_data());
-			parse(data.banks.back(), doc, cur);
+		else if(!xmlStrcmp(cur->name, (const xmlChar *)"banks")){
+			xmlNodePtr b = cur->xmlChildrenNode;
+			while(b != 0){
+				if(!xmlStrcmp(b->name, BAD_CAST "bank")){
+					data.banks.push_back(bank_data());
+					parse(data.banks.back(), doc, cur);
+				}
+				b = b->next;
+			}
 		}
 		cur = cur->next;
 	}
-
-	xmlFreeDoc(doc);
 
 	metronome *metro = obj->get_metronome();
 	metro->clear();
@@ -318,6 +381,79 @@ void preset::read()
 	}
 }
 
+xmlNodePtr xml_find_index(xmlNodePtr cur, const xmlChar *name, int index)
+{
+	cur = cur->xmlChildrenNode;
+	while(cur != 0){
+		if(!xmlStrcmp(cur->name, name)){
+			xmlChar *s;
+			if((s = xmlGetProp(cur, BAD_CAST "index"))){
+				int i = atoi((const char*)s);
+				xmlFree(s);
+				if(i == index) return cur;
+			}
+		}
+		cur = cur->next;
+	}
+	return 0;
+}
+
+xmlNodePtr xml_find_or_create(xmlNodePtr cur, const xmlChar *name, int index)
+{
+	xmlNodePtr out = xml_find_index(cur, name, index);
+	if(!out){
+		out = xmlNewChild(cur, 0, name, 0);
+		std::string ix = to_string(index);
+		xmlSetProp(out, BAD_CAST "index", BAD_CAST ix.c_str());
+	}
+	return out;
+}
+
 void preset::save()
 {
+	if(doc) make_backup();
+	else read();
+
+	looper_data data;
+
+
+
+	xmlNodePtr root = xmlDocGetRootElement(doc);
+	if(!root) throw file_error(this);
+
+	if(xmlStrcmp(root->name, BAD_CAST "looper")){
+		throw format_error(this);
+	}
+
+	xmlNodePtr cur = root->xmlChildrenNode;
+	while(cur != 0){
+		if(!xmlStrcmp(cur->name, BAD_CAST "banks")){
+			break;
+		}
+		cur = cur->next;
+	}
+	if(!cur) cur = xmlNewChild(root, 0, BAD_CAST "banks", 0);
+
+	for(size_t bi=1; bi<=obj->get_banks(); ++bi){
+		bank *b = obj->get_bank(bi);
+		xmlNodePtr xb = xml_find_or_create(cur, BAD_CAST "bank", bi);
+		xmlSetProp(xb, BAD_CAST "name",
+			   BAD_CAST b->get_name().c_str());
+
+		// TODO: Update input channels
+
+		for(size_t si; si<=b->get_sample_count(); ++si){
+			sample *s = b->get_sample(si);
+			xmlNodePtr xs;
+			xs = xml_find_or_create(xb, BAD_CAST "source", si);
+			std::string o(to_string(s->get_offset()));
+			xmlSetProp(xs, BAD_CAST "offset", BAD_CAST o.c_str());
+			xmlSetProp(xs, BAD_CAST "name",
+				   BAD_CAST s->get_source().c_str());
+		}
+	}
+
+	xmlSaveFormatFile(get_source().c_str(), doc, 1);
+
+	clear_dirty();
 }

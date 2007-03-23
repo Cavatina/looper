@@ -15,7 +15,7 @@ public:
 	// todo: per-sample fade-in and -out values?
 
 	int32_t get_offset() const;
-	const std::string & get_source() const;
+	std::string get_source() const;
 
 	// pre-buffer xxxx bytes => or own class?
 	void prebuffer_from(int32_t frame);
@@ -28,6 +28,7 @@ public:
 
 private:
 	std::string source;
+	ssize_t offset;
 };
 
 #endif

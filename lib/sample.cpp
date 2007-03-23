@@ -5,9 +5,19 @@ void sample::set_source(const std::string &)
 
 }
 
-void sample::set_offset(ssize_t)
+std::string sample::get_source() const
 {
+	return source;
+}
 
+void sample::set_offset(ssize_t offset_)
+{
+	offset = offset_;
+}
+
+ssize_t sample::get_offset() const
+{
+	return offset;
 }
 
 void sample::prebuffer_from(int32_t frame)

@@ -29,6 +29,7 @@ public:
 	audio_engine *get_audio_engine() { return audio.get(); }
 	midi_engine *get_midi_engine() { return midi.get(); }
 	bank *get_bank(size_t);
+	size_t get_banks() const { return banks.size(); }
 	metronome *get_metronome() { return &m; }
 
 	void initialize();

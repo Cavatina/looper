@@ -385,6 +385,7 @@ void preset::read()
 	}
 	audio_engine *audio =  obj->get_audio_engine();
 	audio->set_name(data.config.client_name);
+	audio->set_metronome(metro);
 	audio->initialize();
 
 	std::list<bank_data>::iterator i = data.banks.begin();

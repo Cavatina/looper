@@ -6,6 +6,14 @@
 #include <unistd.h>
 
 #include "command.h"
+#include "debug.h"
+
+extern looper app;
+
+void shutmedown(void *)
+{
+	app.shutdown();
+}
 
 void looper::set_banks(size_t new_size)
 {
@@ -26,6 +34,7 @@ void looper::set_persistent_storage(persistent_storage *s)
 void looper::set_audio_engine(audio_engine *e)
 {
 	audio.reset(e);
+	audio->set_shutdown(shutmedown);
 }
 
 void looper::set_midi_engine(midi_engine *e)
@@ -67,6 +76,8 @@ void looper::run()
 		catch(const command::error &e){
 			std::cerr << e.what() << std::endl;
 		}
+		DBG2(bbtf &t = m.get_current_time();
+		     std::cerr<<t.bar<<"/"<<t.beat<<"/"<<t.tick<<"\r";);
 		usleep(10000);
 	}
 }

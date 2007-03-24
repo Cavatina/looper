@@ -5,7 +5,11 @@
 #include <stdexcept>
 
 class bank;
+class metronome;
 class looper;
+class command;
+
+command *command_parse(looper *, const std::string &);
 
 class command
 {
@@ -54,7 +58,7 @@ public:
 			error(c, "Invalid method.") {}
 	};
 
-private:
+protected:
 	std::string cmd;
 };
 
@@ -76,7 +80,21 @@ private:
 	std::string method;
 };
 
-command *command_parse(looper *, const std::string &);
+typedef void (metronome::*metronome_member_fn)();
+
+class metronome_command : public command
+{
+public:
+	metronome_command(looper *, const std::string &,
+			  const std::string &);
+
+	void execute();
+
+private:
+	metronome *obj;
+	metronome_member_fn fn;
+	std::string method;
+};
 
 
 #endif

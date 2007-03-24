@@ -396,7 +396,6 @@ void preset::read()
 	obj->set_banks(data.banks.size());
 	i = data.banks.begin();
 	for(; i != data.banks.end(); ++i){
-		unsigned short channels = i->input.size();
 		bank *b = obj->get_bank(i->index);
 		b->set_index(i->index);
 		b->set_name(i->name);
@@ -414,12 +413,10 @@ void preset::read()
 				s->set_source(j->name);
 				s->set_offset(j->offset);
 			}
-			// TODO: channels = max(channels, s->get_channels());
 		}
 
 	// TODO: Handle re-read of configuration!
 
-		b->set_channels(channels);
 		i->input.sort();
 		std::list<connector_data>::const_iterator k = i->input.begin();
 		for(; k != i->input.end(); ++k){

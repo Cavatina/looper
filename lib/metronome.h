@@ -35,6 +35,10 @@ struct tempo
 class metronome
 {
 public:
+	void start();
+	void stop();
+	void toggle();
+
 	int32_t get_beat();
 	int32_t get_bar();
 	int32_t get_tick();

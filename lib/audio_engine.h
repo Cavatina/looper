@@ -3,14 +3,14 @@
 
 #include <stdexcept>
 #include <string>
-#include "channel.h"
 #include "metronome.h"
+#include "sample.h"
 
-typedef struct _jack_client jack_client_t;
-typedef struct _jack_port jack_port_t;
+typedef uint32_t jack_nframes_t;
 
 typedef void (shutdown_fn)(void *);
 
+// TODO: Should really be a singleton...
 class audio_engine
 {
 public:
@@ -25,8 +25,7 @@ public:
 	// function to call on audioengine shutdown
 	void set_shutdown(shutdown_fn *f);
 
-	void register_channel(input_channel *);
-	void register_channel(output_channel *);
+	void connect(const std::string &, const std::string &);
 
 	// used by looper to determine required buffering length etc.
 	uint32_t get_sample_rate() const;
@@ -38,12 +37,16 @@ public:
 
 	struct init_failure : public error
 	{
-		init_failure(const std::string &n) : error("Failed to initialize jack audio library [" + n + "].") {}
+		init_failure(const std::string &n)
+			: error("Failed to initialize jack audio library ["
+				+ n + "].") {}
 	};
 
 	struct missing_playback : public error
 	{
-		missing_playback() : error("Failed to find any suitable playback ports.") {}
+		missing_playback()
+			: error("Failed to find any suitable playback ports.")
+			{}
 	};
 
 	struct missing_output : public error
@@ -51,12 +54,41 @@ public:
 		missing_output(const std::string &s) : error(s) {}
 	};
 
+	class dport
+	{
+	public:
+		dport(int id_, int channels_ = 0)
+			: id(id_), channels(channels_)
+			{}
+		virtual ~dport();
+		std::string get_name() const { return name; }
+		int get_id() const { return id; }
+		int get_channels() const { return channels; }
+
+		virtual bool is_playing() const { return false; }
+		virtual bool is_recording() const { return false; }
+		virtual bool is_scheduled() const { return false; }
+		virtual bool cancel_scheduled() { return false; }
+
+		virtual void start(const bbt &when, sample *) = 0;
+		virtual void record(const bbt &when, sample *) = 0;
+		virtual void stop(const bbt &when) = 0;
+
+		virtual void input(int, const std::string &) = 0;
+
+	private:
+		int id;
+		int channels;
+		std::string name;
+	};
+
+	dport *add_input(int, unsigned int);
+	dport *add_output(int, unsigned int);
 
 private:
+	static int process(jack_nframes_t, void *);
 	std::string name;
 
-	jack_client_t *client;
-	jack_port_t *output_port[2];
 	unsigned long sample_rate;
 	shutdown_fn *sfn;
 	metronome *m;

@@ -1,8 +1,14 @@
 #include "sample.h"
 
-void sample::set_source(const std::string &)
+sample::sample(const std::string &source_,
+	       int offset_, int fadein_, int fadeout_)
+	: source(source_), offset(offset_), fadein(fadein_), fadeout(fadeout_)
 {
+}
 
+void sample::set_source(const std::string &source_)
+{
+	source = source_;
 }
 
 std::string sample::get_source() const
@@ -10,28 +16,32 @@ std::string sample::get_source() const
 	return source;
 }
 
-void sample::set_offset(ssize_t offset_)
+void sample::set_offset(int offset_)
 {
 	offset = offset_;
 }
 
-ssize_t sample::get_offset() const
+int sample::get_offset() const
 {
 	return offset;
 }
 
-void sample::prebuffer_from(int32_t frame)
+void sample::set_fadein(int fadein_)
 {
+	fadein = fadein_;
 }
 
-void sample::discard_buffer()
+int sample::get_fadein() const
 {
+	return fadein;
 }
 
-size_t sample::get_channel_data(int32_t from_frame,
-				short unsigned int channel,
-				void *buf,
-				size_t frames)
+void sample::set_fadeout(int fadeout_)
 {
-	return 0;
+	fadeout = fadeout_;
+}
+
+int sample::get_fadeout() const
+{
+	return fadeout;
 }

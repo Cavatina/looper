@@ -4,7 +4,6 @@
 #include <stdexcept>
 #include <string>
 #include <list>
-#include "channel.h"
 #include "command.h"
 
 typedef struct _snd_seq snd_seq_t;

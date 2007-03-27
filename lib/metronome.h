@@ -76,6 +76,9 @@ public:
 	uint32_t frames_to_beat(const tempo *, uint32_t);
 	uint32_t frames_to_tick(const tempo *, uint32_t);
 
+	bbt now() const { return current_time; }
+	bbt next_bar() const;
+
 private:
 	std::list<tempo> tempo_changes;
 	std::list<tempo>::iterator tempo_it;

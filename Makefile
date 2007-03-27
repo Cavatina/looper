@@ -20,6 +20,7 @@ OBJ := $(patsubst %.c,   %.o, $(filter %.c,$(SRC))) \
 ALL_OBJ += $(OBJ)
 
 DEP := $(patsubst %.o,%.d,$(ALL_OBJ))
+ALLFILES := $(SRC)
 
 CPPFLAGS = $(CFLAGS)
 LDFLAGS:=`pkg-config --cflags --libs jack` \

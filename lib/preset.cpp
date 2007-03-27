@@ -269,6 +269,8 @@ struct source_data
 	int index;
 	std::string name;
 	int offset;
+	int fadein;
+	int fadeout;
 
 	bool operator<(const source_data &b) { return index < b.index; }
 };
@@ -294,6 +296,14 @@ static void parse(source_data &data, xmlDocPtr doc, xmlNodePtr cur)
 	}
 	if((s = xmlGetProp(cur, (const xmlChar *)"offset"))){
 		data.offset = atoi((const char*)s);
+		xmlFree(s);
+	}
+	if((s = xmlGetProp(cur, (const xmlChar *)"fadein"))){
+		data.fadein = atoi((const char*)s);
+		xmlFree(s);
+	}
+	if((s = xmlGetProp(cur, (const xmlChar *)"fadeout"))){
+		data.fadeout = atoi((const char*)s);
 		xmlFree(s);
 	}
 }
@@ -405,28 +415,32 @@ void preset::read()
 		for(; j != i->sources.end(); ++j){
 			sample *s;
 			if(!(s = b->get_sample(j->index))){
-				s = new sample();
-				s->set_source(j->name);
-				s->set_offset(j->offset);
+				s = new sample(j->name, j->offset,
+					       j->fadein, j->fadeout);
 				b->add_sample(s);
 			}
 			else {
 				s->set_source(j->name);
 				s->set_offset(j->offset);
+				s->set_fadein(j->fadein);
+				s->set_fadeout(j->fadeout);
 			}
 		}
 
 	// TODO: Handle re-read of configuration!
 
+		unsigned int chn = i->input.size();
+		audio_engine::dport *in = audio->add_input(i->index, chn);
+		audio_engine::dport *out = audio->add_output(i->index, chn);
+		b->set_audio_channels(in, out);
+
 		i->input.sort();
 		std::list<connector_data>::const_iterator k = i->input.begin();
-		for(; k != i->input.end(); ++k){
-			input_channel *c = new input_channel(b);
-			c->set_name(k->name);
-			if(k->channel >= 0) c->set_index(k->channel);
-			c->set_connect(k->connect);
-			b->add_channel(c);
-			audio->register_channel(c);
+		for(unsigned int ch=1; k != i->input.end(); ++k, ++ch){
+			unsigned int c = k->channel || ch;
+			std::string n = b->channel_name(c);
+			in->input(c, n);
+			audio->connect(b->channel_name(c), k->connect);
 		}
 	}
 

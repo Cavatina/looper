@@ -5,9 +5,9 @@
 #include <string>
 #include <deque>
 
-#include "channel.h"
 #include "sample.h"
 #include "metronome.h"
+#include "audio_engine.h"
 
 //float time_beats_per_bar = 4.0;
 //float time_beat_type = 4.0;
@@ -17,6 +17,14 @@
 class bank
 {
 public:
+	// Defaults for new recorded samples:
+	static const int sample_offset = 100; // 100ms offset
+	// fade in length == offset;
+        // sample should be fully faded in at first beat.
+	static const int sample_fade_in = 100;
+	// Recording continues for this long after a full bar.
+	static const int sample_fade_out = 500;
+
 	// loop() : Schedule playing in a endless loop, until called again.
 	//          If recording, stop and schedule loop;
 	//          If called again when still scheduled, cancel schedule.
@@ -44,6 +52,9 @@ public:
 	// discard() : Discard current sample.
 	void discard();
 
+
+	bank(metronome *m_) : m(m_) {}
+	~bank();
 	void set_name(const std::string &name_);
 	std::string get_name() const { return name; }
 
@@ -51,9 +62,10 @@ public:
 	// Implicit by samples? => no, decided by input channels,
 	// but should allow samples with less channels.
 	unsigned short get_channels() const;
-	void add_channel(channel *);
+	std::string channel_name(unsigned int) const;
 	void add_sample(sample *);
 
+	bool has_samples() const { return !samples.empty(); }
 	sample *get_sample(unsigned short);
 	sample *get_current_sample();
 	unsigned short get_sample_index(sample *) const;
@@ -63,29 +75,31 @@ public:
 
 	bool is_playing_or_scheduled() const;
 	bool is_recording() const;
+	bool is_idle() const;
 
 	void process_recorded_channels();
 
-	size_t get_audio(unsigned short channel, void *buf, size_t);
 	uint32_t get_current_sample_frame();
+	void set_audio_channels(audio_engine::dport *, audio_engine::dport *);
 
 private:
 	void finalize_recording();
+	std::string new_sample_name();
 
 	std::deque<sample *> samples;
-	std::deque<channel *> channels;
 
 	std::string name;
 	size_t index;
 
 	bool recording;
 	bool playing;
-	std::auto_ptr<bbt> scheduled_record;
-	std::auto_ptr<bbt> scheduled_play;
-	std::auto_ptr<bbt> scheduled_stop;
-
+	bool looping;
 	int loops_to_play;
-	unsigned short current_sample;
+
+	audio_engine::dport *audio_play;
+	audio_engine::dport *audio_rec;
+
+	metronome *m;
 };
 
 #endif

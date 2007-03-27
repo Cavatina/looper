@@ -1,27 +1,79 @@
 #include "bank.h"
+#include "metronome.h"
+#include <fcntl.h>
 
+#include <stdexcept>
 #include <iostream>
 
 #include "util/debug.h"
+#include "util/to_string.h"
+#include "util/string_split.h"
+#include "util/fs.h"
 
 void bank::loop()
 {
+	if(!audio_play) return;
+	if(looping){
+		if(audio_play->is_playing()){
+			looping = playing = false;
+			audio_play->stop(m->next_bar());
+		}
+		else if(!audio_play->cancel_scheduled()){
+			looping = playing = false;
+			audio_play->stop(m->next_bar());
+		}
+	}
+	else if(has_samples()){
+		if(recording){
+			audio_rec->stop(m->next_bar());
+			recording = false;
+		}
+		looping = playing = true;
+		audio_play->start(m->next_bar(), get_current_sample());
+	}
 }
 
 void bank::play()
 {
+	if(has_samples() && audio_play){
+		audio_play->start(m->next_bar(), get_current_sample());
+		playing = true;
+	}
 }
 
 void bank::stop()
 {
+	if(audio_rec) audio_rec->stop(m->now());
+	if(audio_play) audio_play->stop(m->now());
+	looping = playing = recording = false;
 }
 
 void bank::record()
 {
+	if(!audio_rec) return;
+	if(playing){
+		audio_play->stop(m->next_bar());
+		playing = false;
+	}
+	if(recording){
+		audio_rec->stop(m->next_bar());
+	}
+	else {
+		samples.push_front(new sample(new_sample_name(),
+					      sample_offset,
+					      sample_fade_in,
+					      sample_fade_out));
+		audio_rec->start(m->next_bar(), samples.front());
+	}
+	recording = !recording;
 }
 
 void bank::play_once()
 {
+	if(!playing && audio_play){
+		playing = true;
+		audio_play->start(m->next_bar(), get_current_sample());
+	}
 }
 
 void bank::cycle_samples()
@@ -30,6 +82,8 @@ void bank::cycle_samples()
 	sample *s = samples.front();
 	samples.push_back(s);
 	samples.pop_front();
+
+	// TODO: Schedule playing offset from previous bar (?)
 }
 
 void bank::discard()
@@ -43,6 +97,46 @@ void bank::discard()
 	delete s;
 }
 
+bank::~bank()
+{
+	std::deque<sample *>::iterator i = samples.begin();
+	for(; i != samples.end(); ++i) delete *i;
+	samples.clear();
+}
+
+std::string bank::channel_name(unsigned int index) const
+{
+	return name + "_in" + to_string(index);
+}
+
+std::string bank::new_sample_name()
+{
+	int n = samples.size() + 1;
+	if(!samples.empty()){
+		std::deque<int> s = split_int(samples.front()->get_source());
+		if(!s.empty() && s.back() > n) n = s.back();
+	}
+
+	for(int max = n + 1000; n < max; ++n){
+		std::string fname = "samples/" + name + "_" +
+			to_string(n) + ".wav";
+		int fd = open(fname.c_str(), O_RDONLY);
+		if(fd == -1){
+			fs::mkpath(fname);
+			return fname;
+		}
+		close(fd);
+	}
+	char buf[64] = "samples/";
+	strcpy(buf+8, name.c_str());
+	strcat(buf+8, ".wav.XXXXXX");
+	int i = mkstemp(buf);
+	if(i < 0)
+		throw std::runtime_error("Failed to find unique .wav name.");
+	close(i);
+	return std::string(buf);
+}
+
 void bank::set_name(const std::string &name_)
 {
 	name = name_;
@@ -52,17 +146,13 @@ void bank::set_name(const std::string &name_)
 // but should allow samples with less channels.
 unsigned short bank::get_channels() const
 {
-	return channels.size() || 1;
+//	return channels.size() || 1;
+	return 1;
 }
 
 void bank::add_sample(sample *s)
 {
 	samples.push_back(s);
-}
-
-void bank::add_channel(channel *c)
-{
-	channels.push_back(c);
 }
 
 sample *bank::get_sample(unsigned short index)
@@ -100,7 +190,8 @@ void bank::remove_sample(sample *)
 
 bool bank::is_playing_or_scheduled() const
 {
-	return (playing || scheduled_play.get());
+	return (playing || looping
+		|| audio_play->is_playing() || audio_play->is_scheduled());
 }
 
 bool bank::is_recording() const
@@ -112,16 +203,13 @@ void bank::process_recorded_channels()
 {
 }
 
-size_t bank::get_audio(unsigned short, void *, size_t)
-{
-	return 0;
-}
-
-uint32_t bank::get_current_sample_frame()
-{
-	return 0;
-}
-
 void bank::finalize_recording()
 {
+}
+
+void bank::set_audio_channels(audio_engine::dport *play,
+			      audio_engine::dport *rec)
+{
+	audio_play = play;
+	audio_rec = rec;
 }

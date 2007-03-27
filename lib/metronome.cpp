@@ -60,6 +60,11 @@ tempo *metronome::get_current_tempo()
 	return &*tempo_it;
 }
 
+bbt metronome::next_bar() const
+{
+	return bbt(current_time.bar+1, 1, 0);
+}
+
 uint32_t metronome::get_frames_per_bar(const tempo *t)
 {
 	return (uint32_t)(framerate * 60 * t->beatsperbar / (double)t->bpm);

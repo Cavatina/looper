@@ -43,7 +43,7 @@ void looper::toggle()
 void looper::set_banks(size_t new_size)
 {
 	while(new_size > banks.size()){
-		banks.push_back(new bank());
+		banks.push_back(new bank(&m));
 	}
 	if(new_size < banks.size()){
 		for(size_t i=new_size; i<banks.size(); ++i) delete banks[i];

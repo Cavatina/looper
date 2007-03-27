@@ -19,6 +19,15 @@
 class looper
 {
 public:
+	// Toggle metronome start/stop
+	void toggle();
+
+	// Start metronome, if already running: pause.
+	void start();
+
+	// Stop metronome and rewind timer to 1/1/0.
+	void stop();
+
 	void set_banks(size_t);
 	void set_audio_engine(audio_engine *);
 	void set_midi_engine(midi_engine *);

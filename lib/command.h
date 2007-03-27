@@ -80,19 +80,19 @@ private:
 	std::string method;
 };
 
-typedef void (metronome::*metronome_member_fn)();
+typedef void (looper::*looper_member_fn)();
 
-class metronome_command : public command
+class looper_command : public command
 {
 public:
-	metronome_command(looper *, const std::string &,
+	looper_command(looper *, const std::string &,
 			  const std::string &);
 
 	void execute();
 
 private:
-	metronome *obj;
-	metronome_member_fn fn;
+	looper *obj;
+	looper_member_fn fn;
 	std::string method;
 };
 

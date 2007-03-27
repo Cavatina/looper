@@ -20,7 +20,7 @@ public:
 };
 
 typedef lookup_method<bank> bm;
-typedef lookup_method<metronome> mm;
+typedef lookup_method<looper> mm;
 
 static bm bank_methods[] =
 {
@@ -33,11 +33,11 @@ static bm bank_methods[] =
 	bm("discard", &bank::discard),
 };
 
-static mm metronome_methods[] =
+static mm looper_methods[] =
 {
-	mm("start", &metronome::start),
-	mm("stop", &metronome::stop),
-	mm("toggle", &metronome::toggle)
+	mm("start", &looper::start),
+	mm("stop", &looper::stop),
+	mm("toggle", &looper::toggle)
 };
 
 
@@ -53,9 +53,9 @@ command *command_parse(looper *l, const std::string &cmd)
 		if(s.size() != 3) throw command::illegal_command(cmd);
 		return new bank_command(l, cmd, atoi(s[1].c_str()), s[2]);
 	}
-	else if(s[0] == "metronome"){
+	else if(s[0] == "metronome" || s[0] == "looper"){
 		if(s.size() != 2) throw command::illegal_command(cmd);
-		return new metronome_command(l, cmd, s[1]);
+		return new looper_command(l, cmd, s[1]);
 	}
 	else throw command::invalid_object(cmd);
 }
@@ -92,25 +92,25 @@ void bank_command::execute()
 	CALL_MEMBER_FN(obj, fn)();
 }
 
-static metronome_member_fn get_metronome_method(const std::string &cmd,
-						const std::string &met)
+static looper_member_fn get_looper_method(const std::string &cmd,
+					  const std::string &met)
 {
-	for(size_t i=0; i<ARRAYSIZE(metronome_methods); ++i){
-		if(met == metronome_methods[i].method){
-			return metronome_methods[i].fn;
+	for(size_t i=0; i<ARRAYSIZE(looper_methods); ++i){
+		if(met == looper_methods[i].method){
+			return looper_methods[i].fn;
 		}
 	}
 	throw command::invalid_method(cmd);
 }
 
-metronome_command::metronome_command(looper *l,
-				     const std::string &cmd,
-				     const std::string &met)
-	: command(cmd), obj(l->get_metronome()),
-	  fn(get_metronome_method(cmd, met)), method(met)
+looper_command::looper_command(looper *l,
+			       const std::string &cmd,
+			       const std::string &met)
+	: command(cmd), obj(l),
+	  fn(get_looper_method(cmd, met)), method(met)
 {}
 
-void metronome_command::execute()
+void looper_command::execute()
 {
 	DBG2(std::cerr<<"command: execute ["<<cmd<<"]"<<std::endl);
 	CALL_MEMBER_FN(obj, fn)();

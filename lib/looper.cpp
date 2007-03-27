@@ -15,6 +15,31 @@ void shutmedown(void *)
 	app.shutdown();
 }
 
+void looper::start()
+{
+	m.start();
+	if(!m.is_running()){
+		std::vector<bank *>::iterator i = banks.begin();
+		for(; i != banks.end(); ++i) (*i)->stop();
+	}
+}
+
+void looper::stop()
+{
+	m.stop();
+	std::vector<bank *>::iterator i = banks.begin();
+	for(; i != banks.end(); ++i) (*i)->stop();
+}
+
+void looper::toggle()
+{
+	m.toggle();
+	if(!m.is_running()){
+		std::vector<bank *>::iterator i = banks.begin();
+		for(; i != banks.end(); ++i) (*i)->stop();
+	}
+}
+
 void looper::set_banks(size_t new_size)
 {
 	while(new_size > banks.size()){

@@ -19,7 +19,7 @@ OBJ := $(patsubst %.c,   %.o, $(filter %.c,$(SRC))) \
 
 ALL_OBJ += $(OBJ)
 
-DEP := $(patsubst %.o,%.d,$(ALL_OBJ))
+DEP := $(patsubst %.o,%.P,$(ALL_OBJ))
 ALLFILES := $(SRC)
 
 CPPFLAGS = $(CFLAGS)
@@ -38,18 +38,20 @@ looper: $(OBJ)
 	@$(LINK.o) $(LDFLAGS) $(OBJ) -o $@
 
 %.o: %.c
-	@$(CC) $(CFLAGS) -c $< -o $@
+	@$(CC) -MMD $(CFLAGS) -c $< -o $@
+	@cp $*.d $*.P; \
+	 sed -e 's/#.*//' -e 's/^[^:]*: *//' -e 's/ *\\$$//' \
+	     -e '/^$$/ d' -e 's/$$/ :/' < $*.d >> $*.P; \
+	 rm -f $*.d
 
 %.o: %.cpp
-	@$(CXX) $(CFLAGS) -c $< -o $@
+	@$(CXX) -MMD $(CFLAGS) -c $< -o $@
+	@cp $*.d $*.P; \
+	 sed -e 's/#.*//' -e 's/^[^:]*: *//' -e 's/ *\\$$//' \
+	     -e '/^$$/ d' -e 's/$$/ :/' < $*.d >> $*.P; \
+	 rm -f $*.d
 
 -include $(DEP)
-
-%.d: %.cpp
-	@set -e; rm -f $@; \
-	 $(CC) -MM $(CPPFLAGS) $< > $@.$$$$; \
-	 sed 's,\($*\)\.o[ :]*,\1.o $@ : ,g' < $@.$$$$ > $@; \
-	 rm -f $@.$$$$*
 
 clean:
 	-@for file in $(ALL_OBJ) $(DEP) $(targets); do \

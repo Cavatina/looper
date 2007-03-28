@@ -46,7 +46,7 @@ void *disk_thread::main(void *arg)
 
 		cav::slist_mrsw<jack_dport> *i = g_inputs;
 		while(i && i->data()){
-			jack_dport *d = i->data();
+//			jack_dport *d = i->data();
 
 			i = i->next();
 		}

@@ -55,7 +55,7 @@ public:
 
 	bank(metronome *m_)
 		: index(0), recording(false), playing(false), looping(false),
-		  loops_to_play(0), audio_play(0), audio_rec(0), m(0)
+		  loops_to_play(0), audio_play(0), audio_rec(0), m(m_)
 		{}
 	~bank();
 	void set_name(const std::string &name_);

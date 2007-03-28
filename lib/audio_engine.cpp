@@ -1,93 +1,63 @@
 #include "audio_engine.h"
-#include "bank.h"
-
-#include <jack/jack.h>
-#include <jack/transport.h>
-#include <jack/ringbuffer.h>
-#include <alsa/asoundlib.h>
-#include <pthread.h>
-#include <sndfile.h>
+#include "jack_engine.h"
+#include "disk_engine.h"
+#include "util/slist.h"
+#include "util/debug.h"
 
 #include <iostream>
 
+#include <jack/transport.h>
+
 jack_client_t *client;
 jack_port_t *output_port[2];
+jack_nframes_t sample_rate;
 
-typedef struct _thread_info {
-	pthread_t thread_id;
-	metronome *metro;
-	jack_nframes_t duration;
-	jack_nframes_t rb_size;
-	jack_client_t *client;
-	volatile bool can_capture;
-	volatile bool can_process;
-} thread_info_t;
+std::list<jack_dport *> inputs;
+std::list<jack_dport *> outputs;
 
-pthread_mutex_t disk_thread_lock = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t disk_thread_lock_data_ready = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t data_ready = PTHREAD_COND_INITIALIZER;
+cav::slist_mrsw<jack_dport> *g_inputs = new cav::slist_mrsw<jack_dport>();
+cav::slist_mrsw<jack_dport> *g_outputs = new cav::slist_mrsw<jack_dport>();
 
-struct action
-{
-	enum ACTION {
-		Play,
-		Record,
-		Stop
-	} atype;
-	bbt when;
-
-	action() : atype(action::Stop) {}
-	action(action::ACTION type_, const bbt &when_)
-		: atype(type_), when(when_) {}
-};
-
-struct stop_action : public action
-{
-	stop_action(const bbt &when) : action(Stop, when) {}
-};
-
-struct play_action : public action
-{
-	play_action(const bbt &when, sample *s_)
-		: action(Play, when), s(s_) {}
-	sample *s;
-	SNDFILE *sf;
-};
-
-struct record_action : public action
-{
-	record_action(const bbt &when, sample *s_)
-		: action(Record, when), s(s_) {}
-	sample *s;
-	SNDFILE *sf;
-};
+disk_thread *diskthread;
 
 audio_engine::dport::~dport()
 {
 }
 
-class jack_dport : public audio_engine::dport
+void audio_engine::purge_input(dport *p)
 {
-public:
-	jack_dport(int id_, int channels_ = 0)
-		: dport(id_, channels_), ports(channels_, (jack_port_t*)0) {}
-	virtual ~jack_dport() {}
-	bool is_playing() const;
-	bool is_recording() const { return false; }
-	bool is_scheduled() const { return false; }
-	bool cancel_scheduled() { return false; }
+	std::list<jack_dport *>::iterator i = inputs.begin();
+	for(;i != inputs.end(); ++i) if(p == *i) break;
+	if(i != inputs.end()){
+		disk_thread::lock();
+		inputs.erase(i);
+		delete *i;
+		disk_thread::unlock();
+	}
+}
 
-	void start(const bbt &when, sample *);
-	void record(const bbt &when, sample *);
-	void stop(const bbt &when);
+void audio_engine::purge_output(dport *p)
+{
+	std::list<jack_dport *>::iterator i = outputs.begin();
+	for(;i != outputs.end(); ++i) if(p == *i) break;
+	if(i != outputs.end()){
+		disk_thread::lock();
+		outputs.erase(i);
+		delete *i;
+		disk_thread::unlock();
+	}
+}
 
-	void input(int, const std::string &);
+jack_dport::jack_dport(int id_, int channels_)
+	: dport(id_, channels_), ports(channels_, (jack_port_t*)0),
+	  rb(jack_ringbuffer_create(DEFAULT_BUFFER_SIZE * channels_))
+{
+}
 
-private:
-	std::list<action *> actions;
-	std::vector<jack_port_t *> ports;
-	jack_ringbuffer_t *rb;
-};
+jack_dport::~jack_dport()
+{
+	if(rb) jack_ringbuffer_free(rb);
+}
 
 bool jack_dport::is_playing() const
 {
@@ -96,50 +66,53 @@ bool jack_dport::is_playing() const
 
 void jack_dport::start(const bbt &when, sample *sample)
 {
-	pthread_mutex_lock(&disk_thread_lock);
+	disk_thread::lock();
 	actions.push_back(new play_action(when, sample));
-	pthread_mutex_unlock(&disk_thread_lock);
+	disk_thread::unlock();
+	disk_thread::wake();
 }
 
 void jack_dport::stop(const bbt &when)
 {
-	pthread_mutex_lock(&disk_thread_lock);
+	disk_thread::lock();
 	actions.push_back(new stop_action(when));
-	pthread_mutex_unlock(&disk_thread_lock);
+	disk_thread::unlock();
 }
 
 void jack_dport::record(const bbt &when, sample *sample)
 {
-	pthread_mutex_lock(&disk_thread_lock);
+	disk_thread::lock();
 	actions.push_back(new record_action(when, sample));
-	pthread_mutex_unlock(&disk_thread_lock);
+	disk_thread::unlock();
 }
 
 void jack_dport::input(int channel, const std::string &name)
 {
 	if(channel < 1 || channel > get_channels())
-		throw std::runtime_error("jack_dport::input: channel out of bounds");
-	pthread_mutex_lock(&disk_thread_lock);
+		throw std::runtime_error("jack_dport::input: out of bounds");
+	disk_thread::lock();
 	if(ports[channel-1]){
 		jack_port_unregister(client, ports[channel-1]);
 	}
 	ports[channel-1] = jack_port_register(client, name.c_str(),
 					      JACK_DEFAULT_AUDIO_TYPE,
 					      JackPortIsInput, 0);
-	pthread_mutex_unlock(&disk_thread_lock);
-}
+	DBG2(if(ports[channel-1])
+	     std::cerr<<"jack_dport.input ["<<name<<"]: Registered."
+	     <<std::endl;
+	     else
+	     std::cerr<<"jack_dport.input ["<<name<<"]: Failed to register!"
+	     <<std::endl);
 
-std::list<jack_dport *> inputs;
-std::list<jack_dport *> outputs;
+	disk_thread::unlock();
+}
 
 audio_engine::dport *audio_engine::add_input(int index, unsigned int channels)
 {
 	// TODO: Check if already existing!!
 
-	pthread_mutex_lock(&disk_thread_lock);
 	jack_dport *r = new jack_dport(index, channels);
-	inputs.push_back(r);
-	pthread_mutex_unlock(&disk_thread_lock);
+	g_inputs = g_inputs->push(r);
 	return r;
 }
 
@@ -147,16 +120,29 @@ audio_engine::dport *audio_engine::add_output(int index, unsigned int channels)
 {
 	// TODO: Check if already existing!!
 
-	pthread_mutex_lock(&disk_thread_lock);
 	jack_dport *r = new jack_dport(index, channels);
-	outputs.push_back(r);
-	pthread_mutex_unlock(&disk_thread_lock);
+	g_outputs = g_outputs->push(r);
 	return r;
 }
 
 void audio_engine::connect(const std::string &p1, const std::string &p2)
 {
-	jack_connect(client, p1.c_str(), p2.c_str());
+	std::string conn[2];
+	conn[0] = p1;
+	conn[1] = p2;
+	for(unsigned int i = 0; i<2; ++i){
+		if(conn[i].find(':') == std::string::npos){
+			conn[i] = name + ":" + conn[i];
+		}
+	}
+	if(jack_connect(client, conn[0].c_str(), conn[1].c_str()) != 0){
+		std::cerr<<"audio_engine.connect ["<<conn[0]<<" -> "<<conn[1]
+			 <<"]: Failed!"<<std::endl;
+	}
+	else {
+		DBG2(std::cerr<<"audio_engine.connect ["<<conn[0]<<" -> "
+		     <<conn[1]<<"]: Ok."<<std::endl);
+	}
 }
 
 
@@ -182,30 +168,6 @@ void audio_engine::connect(const std::string &p1, const std::string &p2)
 */
 
 
-struct reading_channel
-{
-	bank *b;
-	unsigned int channel_id; // unique
-	volatile bool is_reading;
-	SNDFILE *sf;
-	unsigned int channels;
-	std::vector<jack_port_t *> ports;
-	jack_ringbuffer_t *rb;
-};
-
-struct writing_channel
-{
-	bank *b;
-	unsigned int channel_id; // unique
-	volatile bool is_writing;
-	SNDFILE *sf;
-	unsigned int channels;
-	int bitdepth;
-	std::vector<jack_port_t *> ports;
-	jack_ringbuffer_t *rb;
-};
-
-
 int audio_engine::process(jack_nframes_t nframes, void *arg)
 {
 	audio_engine *a = (audio_engine *)arg;
@@ -215,12 +177,12 @@ int audio_engine::process(jack_nframes_t nframes, void *arg)
 
 void jack_shutdown(void *)
 {
-	std::cerr<<"jack_shutdown: No shutdown handler registered..."<<std::endl;
+	std::cerr<<"jack_shutdown: No handler registered..."<<std::endl;
 	exit(1);
 }
 
 audio_engine::audio_engine()
-	: sfn(jack_shutdown)
+	: sample_rate(0), sfn(jack_shutdown), m(0)
 {}
 
 void audio_engine::initialize()
@@ -240,11 +202,15 @@ void audio_engine::initialize()
 					    JACK_DEFAULT_AUDIO_TYPE,
 					    JackPortIsOutput, 0);
 
+	if(!diskthread) diskthread = new disk_thread();
+
 	sample_rate = jack_get_sample_rate(client);
 	if(jack_activate(client)){
 		shutdown();
 		throw init_failure("jack_activate");
 	}
+
+	diskthread->run();
 }
 
 
@@ -252,7 +218,13 @@ void audio_engine::shutdown()
 {
 	if(client){
 		jack_client_close(client);
-		client=0;
+		client = 0;
+	}
+
+	if(diskthread){
+		diskthread->halt();
+		delete diskthread;
+		diskthread = 0;
 	}
 }
 
@@ -266,6 +238,6 @@ void audio_engine::set_shutdown(shutdown_fn *f)
 // used by looper to determine required buffering length etc.
 uint32_t audio_engine::get_sample_rate() const
 {
-	return 0;
+	return sample_rate;
 }
 

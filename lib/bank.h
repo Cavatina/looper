@@ -53,7 +53,10 @@ public:
 	void discard();
 
 
-	bank(metronome *m_) : m(m_) {}
+	bank(metronome *m_)
+		: index(0), recording(false), playing(false), looping(false),
+		  loops_to_play(0), audio_play(0), audio_rec(0), m(0)
+		{}
 	~bank();
 	void set_name(const std::string &name_);
 	std::string get_name() const { return name; }

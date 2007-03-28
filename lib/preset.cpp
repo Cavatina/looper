@@ -440,7 +440,7 @@ void preset::read()
 			unsigned int c = k->channel || ch;
 			std::string n = b->channel_name(c);
 			in->input(c, n);
-			audio->connect(b->channel_name(c), k->connect);
+			audio->connect(k->connect, b->channel_name(c));
 		}
 	}
 

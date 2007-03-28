@@ -85,6 +85,9 @@ public:
 	dport *add_input(int, unsigned int);
 	dport *add_output(int, unsigned int);
 
+	static void purge_input(dport *);
+	static void purge_output(dport *);
+
 private:
 	static int process(jack_nframes_t, void *);
 	std::string name;

@@ -106,7 +106,7 @@ bank::~bank()
 
 std::string bank::channel_name(unsigned int index) const
 {
-	return name + "_in" + to_string(index);
+	return name + "/in_" + to_string(index);
 }
 
 std::string bank::new_sample_name()

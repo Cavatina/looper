@@ -37,7 +37,7 @@ private:
 class midi_engine
 {
 public:
-	midi_engine() : channel(-1) {}
+	midi_engine() : port_in(0), seq_handle(0), channel(-1) {}
 	void set_name(const std::string &name_) { name = name_; }
 	void initialize();
 	void shutdown();

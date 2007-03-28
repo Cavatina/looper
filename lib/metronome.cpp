@@ -3,9 +3,8 @@
 #include "debug.h"
 #include <iostream>
 
-metronome::metronome() : running(false)
+metronome::metronome() : running(false), framerate(96000)
 {
-	framerate = 96000;
 }
 
 void metronome::start() // pause if already running

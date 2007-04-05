@@ -20,6 +20,7 @@ public:
 	metronome *get_metronome() { return m; }
 
 	void initialize();
+	void halt();
 	void shutdown();
 
 	// function to call on audioengine shutdown
@@ -57,13 +58,13 @@ public:
 	class dport
 	{
 	public:
-		dport(int id_, int channels_ = 0)
+		dport(int id_, unsigned int channels_ = 0)
 			: id(id_), channels(channels_)
 			{}
 		virtual ~dport();
 		std::string get_name() const { return name; }
 		int get_id() const { return id; }
-		int get_channels() const { return channels; }
+		unsigned int get_channels() const;
 
 		virtual bool is_playing() const { return false; }
 		virtual bool is_recording() const { return false; }
@@ -73,12 +74,13 @@ public:
 		virtual void start(const bbt &when, sample *) = 0;
 		virtual void record(const bbt &when, sample *) = 0;
 		virtual void stop(const bbt &when) = 0;
+		virtual void stop_now() = 0;
 
-		virtual void input(int, const std::string &) = 0;
+		virtual void input(unsigned int, const std::string &) = 0;
 
 	private:
 		int id;
-		int channels;
+		unsigned int channels;
 		std::string name;
 	};
 
@@ -92,7 +94,6 @@ private:
 	static int process(jack_nframes_t, void *);
 	std::string name;
 
-	unsigned long sample_rate;
 	shutdown_fn *sfn;
 	metronome *m;
 };

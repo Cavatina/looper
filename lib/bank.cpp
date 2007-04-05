@@ -1,5 +1,6 @@
 #include "bank.h"
 #include "metronome.h"
+#include "looper.h"
 #include <fcntl.h>
 
 #include <stdexcept>
@@ -9,6 +10,8 @@
 #include "util/to_string.h"
 #include "util/string_split.h"
 #include "util/fs.h"
+
+extern looper app;
 
 void bank::loop()
 {
@@ -43,8 +46,8 @@ void bank::play()
 
 void bank::stop()
 {
-	if(audio_rec) audio_rec->stop(m->now());
-	if(audio_play) audio_play->stop(m->now());
+	if(audio_rec) audio_rec->stop_now();
+	if(audio_play) audio_play->stop_now();
 	looping = playing = recording = false;
 }
 
@@ -63,7 +66,8 @@ void bank::record()
 					      sample_offset,
 					      sample_fade_in,
 					      sample_fade_out));
-		audio_rec->start(m->next_bar(), samples.front());
+		audio_rec->record(m->next_bar(), samples.front());
+		app.dirty();
 	}
 	recording = !recording;
 }
@@ -146,8 +150,8 @@ void bank::set_name(const std::string &name_)
 // but should allow samples with less channels.
 unsigned short bank::get_channels() const
 {
-//	return channels.size() || 1;
-	return 1;
+	if(audio_rec) return audio_rec->get_channels();
+	else return 1;
 }
 
 void bank::add_sample(sample *s)
@@ -157,7 +161,9 @@ void bank::add_sample(sample *s)
 
 sample *bank::get_sample(unsigned short index)
 {
-	if(index >= 1 && index <= get_sample_count()) samples[index-1];
+	if(!index) return 0;
+	std::deque<sample *>::iterator i = samples.begin();
+	for(; i != samples.end(); ++i) if(!--index) return *i;
 	return 0;
 }
 

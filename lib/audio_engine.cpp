@@ -3,9 +3,12 @@
 #include "disk_engine.h"
 #include "util/slist.h"
 #include "util/debug.h"
+#include "util/to_string.h"
 
 #include <iostream>
+#include <iomanip>
 
+#include <jack/jack.h>
 #include <jack/transport.h>
 
 jack_client_t *client;
@@ -20,53 +23,56 @@ cav::slist_mrsw<jack_dport> *g_outputs = new cav::slist_mrsw<jack_dport>();
 
 disk_thread *diskthread;
 
+#define MAX_CHANNELS 8
+jack_default_audio_sample_t *in_buf[MAX_CHANNELS];
+const size_t sample_size = sizeof(jack_default_audio_sample_t);
+
+size_t overruns = 0;
+size_t underruns = 0;
+
 audio_engine::dport::~dport()
 {
 }
-
-void audio_engine::purge_input(dport *p)
+unsigned int audio_engine::dport::get_channels() const
 {
-	std::list<jack_dport *>::iterator i = inputs.begin();
-	for(;i != inputs.end(); ++i) if(p == *i) break;
-	if(i != inputs.end()){
-		disk_thread::lock();
-		inputs.erase(i);
-		delete *i;
-		disk_thread::unlock();
-	}
+	return channels ? channels : 1;
 }
 
-void audio_engine::purge_output(dport *p)
-{
-	std::list<jack_dport *>::iterator i = outputs.begin();
-	for(;i != outputs.end(); ++i) if(p == *i) break;
-	if(i != outputs.end()){
-		disk_thread::lock();
-		outputs.erase(i);
-		delete *i;
-		disk_thread::unlock();
-	}
-}
+// void audio_engine::purge_input(dport *p)
+// {
+// 	remove_from(g_inputs, p);
+// }
+
+// void audio_engine::purge_output(dport *p)
+// {
+// 	remove_from(g_outputs, p);
+// }
 
 jack_dport::jack_dport(int id_, int channels_)
 	: dport(id_, channels_), ports(channels_, (jack_port_t*)0),
-	  rb(jack_ringbuffer_create(DEFAULT_BUFFER_SIZE * channels_))
+	  rb(jack_ringbuffer_create(DEFAULT_BUFFER_SIZE * channels_)),
+	  recording(false)
 {
 }
 
 jack_dport::~jack_dport()
 {
+	std::list<action *>::iterator i = actions.begin();
+	for(; i != actions.end(); ++i) delete *i;
+	actions.clear();
 	if(rb) jack_ringbuffer_free(rb);
 }
 
 bool jack_dport::is_playing() const
 {
-	return false;
+	return false && !halted;
 }
 
 void jack_dport::start(const bbt &when, sample *sample)
 {
 	disk_thread::lock();
+	DBG2(std::cerr<<"jack_dport::start <"
+	     <<sample->get_source()<<">"<<std::endl);
 	actions.push_back(new play_action(when, sample));
 	disk_thread::unlock();
 	disk_thread::wake();
@@ -79,17 +85,33 @@ void jack_dport::stop(const bbt &when)
 	disk_thread::unlock();
 }
 
-void jack_dport::record(const bbt &when, sample *sample)
+void jack_dport::stop_now()
 {
 	disk_thread::lock();
-	actions.push_back(new record_action(when, sample));
+	recording = false;
+	cancel_record();
 	disk_thread::unlock();
 }
 
-void jack_dport::input(int channel, const std::string &name)
+void jack_dport::record(const bbt &when, sample *sample)
+{
+	disk_thread::lock();
+	DBG2(std::cerr<<"jack_dport[0x"
+	     <<std::hex<<std::setw(4)<<(void*)this<<std::dec<<"]::record <"
+	     <<sample->get_source()<<">"<<std::endl);
+	record_action *a = new record_action(when, sample);
+	a->sf = make_new_soundfile(sample->get_source(), get_channels());
+	actions.push_back(a);
+	recording = true;
+	disk_thread::unlock();
+}
+
+void jack_dport::input(unsigned int channel, const std::string &name)
 {
 	if(channel < 1 || channel > get_channels())
-		throw std::runtime_error("jack_dport::input: out of bounds");
+		throw std::runtime_error("jack_dport.input: "
+					 + to_string(channel) +
+					 " out of bounds.");
 	disk_thread::lock();
 	if(ports[channel-1]){
 		jack_port_unregister(client, ports[channel-1]);
@@ -98,10 +120,12 @@ void jack_dport::input(int channel, const std::string &name)
 					      JACK_DEFAULT_AUDIO_TYPE,
 					      JackPortIsInput, 0);
 	DBG2(if(ports[channel-1])
-	     std::cerr<<"jack_dport.input ["<<name<<"]: Registered."
+	     std::cerr<<"jack_dport.input[0x"
+	     <<std::hex<<std::setw(4)<<(void*)this<<std::dec
+	     <<"] <"<<name<<">: Registered."
 	     <<std::endl;
 	     else
-	     std::cerr<<"jack_dport.input ["<<name<<"]: Failed to register!"
+	     std::cerr<<"jack_dport.input <"<<name<<">: Failed to register!"
 	     <<std::endl);
 
 	disk_thread::unlock();
@@ -113,6 +137,10 @@ audio_engine::dport *audio_engine::add_input(int index, unsigned int channels)
 
 	jack_dport *r = new jack_dport(index, channels);
 	g_inputs = g_inputs->push(r);
+
+	DBG2(std::cerr<<"audio_engine.add_input[0x"
+	     <<std::hex<<std::setw(4)<<(void*)r<<std::dec
+	     <<"] ("<<index<<", "<<channels<<")."<<std::endl);
 	return r;
 }
 
@@ -123,6 +151,19 @@ audio_engine::dport *audio_engine::add_output(int index, unsigned int channels)
 	jack_dport *r = new jack_dport(index, channels);
 	g_outputs = g_outputs->push(r);
 	return r;
+}
+
+size_t jack_dport::start_offset(metronome *m, jack_nframes_t nframes)
+{
+//	const bbtf &now = m->get_current_time();
+	// TODO: Keep a start_time in jack_dport (?)
+	// Only calculate a "rounding" (frame) offset from this time.
+	return 0;
+}
+
+size_t jack_dport::bytes_per_frame() const
+{
+	return sample_size * get_channels();
 }
 
 void audio_engine::connect(const std::string &p1, const std::string &p2)
@@ -168,10 +209,100 @@ void audio_engine::connect(const std::string &p1, const std::string &p2)
 */
 
 
+void process_recording(jack_dport *d, metronome *m, jack_nframes_t nframes)
+{
+	unsigned int i, c;
+	jack_ringbuffer_t *rb = d->get_ringbuffer();
+	unsigned int nports = d->get_channels();
+
+	for(c=0; c<nports; ++c){
+		in_buf[c] = (jack_default_audio_sample_t *)
+			jack_port_get_buffer(d->get_port(c), nframes);
+	}
+	i = d->start_offset(m, nframes);
+	for( ; i<nframes; ++i){
+		for(c=0; c<nports; ++c){
+			if(jack_ringbuffer_write(rb,
+						 (char*)(in_buf[c]+i),
+						 sample_size)
+			   < sample_size)
+				++overruns;
+		}
+	}
+}
+
+const size_t output_channels = 2;
+const jack_nframes_t samples_per_frame = output_channels;
+const size_t bytes_per_frame = samples_per_frame * sample_size;
+jack_default_audio_sample_t framebuf[output_channels];
+jack_default_audio_sample_t *out_buf[output_channels];
+
+void process_playback(jack_dport *d, metronome *m, jack_nframes_t nframes)
+{
+	unsigned int i, c;
+	jack_ringbuffer_t *rb = d->get_ringbuffer();
+	if(!rb) return;
+
+	unsigned int nports = d->get_channels();
+	if(nports > output_channels) nports = output_channels; // TODO: !!
+	size_t bytes_per_frame = nports * sample_size;
+
+	i = d->start_offset(m, nframes);
+	for( ; i<nframes; ++i){
+		if(jack_ringbuffer_read_space(rb) >= bytes_per_frame){
+			jack_ringbuffer_read(rb, (char*)framebuf,
+					     bytes_per_frame);
+			unsigned int o = 0;
+			for(c=0; c<output_channels; ++c){
+				// Mix all sources down to master outputs
+				*(out_buf[c]+i) += framebuf[o];
+				if(++o >= nports) o=0;
+			}
+		}
+		else {
+			++underruns;
+			// TODO: Add nframes to channel offset ?
+			break;
+		}
+	}
+}
+
 int audio_engine::process(jack_nframes_t nframes, void *arg)
 {
+	static bool first = true;
 	audio_engine *a = (audio_engine *)arg;
-	if(a && a->get_metronome()) a->get_metronome()->add_frames(nframes);
+	metronome *m = a->get_metronome();
+	if(m) m->add_frames(nframes);
+
+	size_t c;
+	for(c=0; c<output_channels; ++c){
+		out_buf[c] = (jack_default_audio_sample_t *)
+			jack_port_get_buffer(output_port[c], nframes);
+		memset(out_buf[c], '\0', nframes*sample_size);
+	}
+
+	cav::slist_mrsw<jack_dport> *pit = g_outputs;
+	while(pit && pit->data()){
+		jack_dport *d = pit->data();
+		if(d->is_playing()) process_playback(d, m, nframes);
+		pit = pit->next();
+	}
+
+
+	pit = g_inputs;
+	while(pit && pit->data()){
+		jack_dport *d = pit->data();
+		if(!d->is_recording() && first){
+			std::cerr<<"process: [0x"
+				 <<std::hex<<std::setw(4)<<(void*)d
+				 <<std::dec<<"]"<<std::endl;
+			first = false;
+		}
+		if(d->is_recording()) process_recording(d, m, nframes);
+		pit = pit->next();
+	}
+
+	disk_thread::wake();
 	return 0;
 }
 
@@ -182,7 +313,7 @@ void jack_shutdown(void *)
 }
 
 audio_engine::audio_engine()
-	: sample_rate(0), sfn(jack_shutdown), m(0)
+	: sfn(jack_shutdown), m(0)
 {}
 
 void audio_engine::initialize()
@@ -191,6 +322,7 @@ void audio_engine::initialize()
 		throw init_failure("jack_client_new");
 	}
 
+	sample_rate = jack_get_sample_rate(client);
 	jack_set_process_callback(client, audio_engine::process, this);
 	jack_on_shutdown(client, sfn, this);
 	output_port[0] = jack_port_register(client,
@@ -204,7 +336,6 @@ void audio_engine::initialize()
 
 	if(!diskthread) diskthread = new disk_thread();
 
-	sample_rate = jack_get_sample_rate(client);
 	if(jack_activate(client)){
 		shutdown();
 		throw init_failure("jack_activate");
@@ -214,18 +345,45 @@ void audio_engine::initialize()
 }
 
 
-void audio_engine::shutdown()
+void audio_engine::halt()
 {
-	if(client){
-		jack_client_close(client);
-		client = 0;
-	}
-
 	if(diskthread){
 		diskthread->halt();
 		delete diskthread;
 		diskthread = 0;
 	}
+	cav::slist_mrsw<jack_dport> *pit = g_outputs;
+	while(pit && pit->data()){
+		pit->data()->halt();
+		pit = pit->next();
+	}
+
+	pit = g_inputs;
+	while(pit && pit->data()){
+		pit->data()->halt();
+		pit = pit->next();
+	}
+}
+
+void audio_engine::shutdown()
+{
+	halt();
+
+	if(client){
+		jack_client_close(client);
+		client = 0;
+	}
+
+	if(underruns){
+		std::cerr<<"detected # of buffer underruns: "
+			 <<underruns<<std::endl;
+	}
+	if(overruns){
+		std::cerr<<"detected # of buffer overruns: "
+			 <<overruns<<std::endl;
+	}
+	delete g_inputs;
+	delete g_outputs;
 }
 
 

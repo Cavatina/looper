@@ -15,6 +15,11 @@ void shutmedown(void *)
 	app.shutdown();
 }
 
+looper::~looper()
+{
+	shutdown();
+}
+
 void looper::start()
 {
 	m.start();
@@ -109,8 +114,9 @@ void looper::run()
 
 void looper::shutdown()
 {
-	set_banks(0);
+	audio->halt();
 	storage.reset(0); // Force a save() if dirty...
+	set_banks(0);
 	audio.reset(0);
 	midi.reset(0);
 }

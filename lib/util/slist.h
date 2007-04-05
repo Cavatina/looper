@@ -14,7 +14,7 @@ namespace cav
 			T *p = m_data;
 			m_data = 0;
 			delete p;
-			list_type t = m_next;
+			list_type *t = m_next;
 			m_next = 0;
 			delete t;
 		}
@@ -29,6 +29,21 @@ namespace cav
 			}
 			return new slist_mrsw(data_, this);
 		}
+
+// 		void remove_from(list_type * &l, T *data_){
+// 			// NB! Not thread-safe!
+// 			if(data_ == l->m_data){
+// 				if(l->m_next){
+// 					list_type *tmp = l;
+// 					l = l->m_next;
+// 					delete data_;
+// 					delete tmp;
+// 				}
+// 				else {
+// 					l->m_data = 0;
+// 				}
+// 			}
+// 		}
 
 	private:
 		list_type * volatile m_next;

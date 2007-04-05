@@ -36,6 +36,7 @@ int main(int argc, char *argv[])
 	}
 	catch(std::exception &e) {
 		std::cerr << "Fatal exception: " << e.what() << std::endl;
+		app.shutdown();
 	}
 	exit(0);
 }
@@ -59,6 +60,8 @@ void signal_handler(int signum)
 	}
 	else {
 		std::cerr << "Unhandled signal " << signum << ", exiting." << std::endl;
+		try { app.shutdown(); }
+		catch(...) {}
 		exit(1);
 	}
 }

@@ -41,13 +41,14 @@ public:
 	size_t get_banks() const { return banks.size(); }
 	metronome *get_metronome() { return &m; }
 
+	~looper();
 	void initialize();
 	void run();
 	void shutdown();
 
 private:
-	std::vector<bank *> banks;
 	std::auto_ptr<persistent_storage> storage;
+	std::vector<bank *> banks;
 	std::auto_ptr<audio_engine> audio;
 	std::auto_ptr<midi_engine> midi;
 

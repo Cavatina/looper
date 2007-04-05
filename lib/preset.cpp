@@ -15,6 +15,7 @@
 #include "util/fs.h"
 #include "util/ms_time.h"
 #include "util/to_string.h"
+#include "util/debug.h"
 
 static const char *default_xml =
 "<?xml version=\"1.0\"?>"
@@ -78,7 +79,7 @@ void preset::close_doc()
 
 struct connector_data
 {
-	connector_data() : channel(-1) {}
+	connector_data() : channel(0) {}
 
 	int channel;
 	std::string name;
@@ -398,6 +399,15 @@ void preset::read()
 	audio->set_metronome(metro);
 	audio->initialize();
 
+	std::list<connector_data>::const_iterator k;
+	k = data.config.audio.output.begin();
+	for(unsigned int ch=1; k != data.config.audio.output.end(); ++k, ++ch){
+		unsigned int c = k->channel;
+		if(!c) c = ch;
+		std::string n = "master/out_" + to_string(c); // TODO: !
+		audio->connect(n, k->connect);
+	}
+
 	std::list<bank_data>::iterator i = data.banks.begin();
 	for(; i != data.banks.end(); ++i){
 		if(i->index < 1 || i->index > (int)data.banks.size())
@@ -429,18 +439,19 @@ void preset::read()
 
 	// TODO: Handle re-read of configuration!
 
+		// TODO: allow N:1 <input connect=""/> elements per channel!
 		unsigned int chn = i->input.size();
 		audio_engine::dport *in = audio->add_input(i->index, chn);
 		audio_engine::dport *out = audio->add_output(i->index, chn);
-		b->set_audio_channels(in, out);
+		b->set_audio_channels(out, in);
 
 		i->input.sort();
 		std::list<connector_data>::const_iterator k = i->input.begin();
 		for(unsigned int ch=1; k != i->input.end(); ++k, ++ch){
-			unsigned int c = k->channel || ch;
+			unsigned int c = k->channel ? k->channel : ch;
 			std::string n = b->channel_name(c);
 			in->input(c, n);
-			audio->connect(k->connect, b->channel_name(c));
+			audio->connect(k->connect, n);
 		}
 	}
 
@@ -451,7 +462,6 @@ void preset::read()
 	if(data.config.midi.channel >= 0){
 		midi->set_channel(data.config.midi.channel);
 	}
-	std::list<connector_data>::const_iterator k;
 	k = data.config.midi.input.begin();
 	for(; k != data.config.midi.input.end(); ++k){
 		midi->input_connect(k->connect);
@@ -526,10 +536,17 @@ void preset::save()
 		xmlSetProp(xb, BAD_CAST "name",
 			   BAD_CAST b->get_name().c_str());
 
-		// TODO: Update input channels
+		// TODO: Update input channels according to current connections
 
 		for(size_t si=1; si<=b->get_sample_count(); ++si){
 			sample *s = b->get_sample(si);
+			if(!s){
+				DBG2(std::cerr<<"preset.save: failed to get "
+				     "sample "<<si<<" from bank "<<bi<<
+				     " ("<<b->get_sample_count()<<")."
+				     <<std::endl);
+				continue;
+			}
 			xmlNodePtr xs;
 			xs = xml_find_or_create(xb, BAD_CAST "source", si);
 			std::string o(to_string(s->get_offset()));

@@ -51,29 +51,50 @@ unsigned int audio_engine::dport::get_channels() const
 jack_dport::jack_dport(int id_, int channels_)
 	: dport(id_, channels_), ports(channels_, (jack_port_t*)0),
 	  rb(jack_ringbuffer_create(DEFAULT_BUFFER_SIZE * channels_)),
-	  recording(false)
+	  halted(false)
 {
 }
 
 jack_dport::~jack_dport()
 {
-	std::list<action *>::iterator i = actions.begin();
-	for(; i != actions.end(); ++i) delete *i;
-	actions.clear();
+	std::list<playback_t *>::iterator i = play_queue.begin();
+	for(; i != play_queue.end(); ++i) delete *i;
+	play_queue.clear();
+	std::list<recording_t *>::iterator j = rec_queue.begin();
+	for(; j != rec_queue.end(); ++j) delete *j;
+	rec_queue.clear();
 	if(rb) jack_ringbuffer_free(rb);
 }
 
 bool jack_dport::is_playing() const
 {
-	return false && !halted;
+	return !play_queue.empty() && !halted;
+}
+
+bool jack_dport::is_playing_or_flushing(metronome *m) const
+{
+	return (is_playing()
+		&& m->get_current_time() >= play_queue.front()->real_start)
+		|| jack_ringbuffer_read_space(rb);
+}
+
+bool jack_dport::is_recording() const
+{
+	return !rec_queue.empty() && !halted;
+}
+
+bool jack_dport::is_recording(metronome *m) const
+{
+	return is_recording() && rec_queue.size()
+		&& m->get_current_time() >= rec_queue.front()->start;
 }
 
 void jack_dport::start(const bbt &when, sample *sample)
 {
 	disk_thread::lock();
 	DBG2(std::cerr<<"jack_dport::start <"
-	     <<sample->get_source()<<">"<<std::endl);
-	actions.push_back(new play_action(when, sample));
+	     <<sample->get_source()<<"> @ "<<when<<std::endl);
+	play_queue.push_back(new playback_t(when, sample));
 	disk_thread::unlock();
 	disk_thread::wake();
 }
@@ -81,15 +102,22 @@ void jack_dport::start(const bbt &when, sample *sample)
 void jack_dport::stop(const bbt &when)
 {
 	disk_thread::lock();
-	actions.push_back(new stop_action(when));
+	if(play_queue.size()){
+		play_queue.front()->end = when;
+	}
+	if(rec_queue.size()){
+		rec_queue.front()->end = when;
+	}
 	disk_thread::unlock();
 }
 
 void jack_dport::stop_now()
 {
 	disk_thread::lock();
-	recording = false;
 	cancel_record();
+	if(!play_queue.empty()){
+		play_queue.front()->end = bbt();
+	}
 	disk_thread::unlock();
 }
 
@@ -99,10 +127,8 @@ void jack_dport::record(const bbt &when, sample *sample)
 	DBG2(std::cerr<<"jack_dport[0x"
 	     <<std::hex<<std::setw(4)<<(void*)this<<std::dec<<"]::record <"
 	     <<sample->get_source()<<">"<<std::endl);
-	record_action *a = new record_action(when, sample);
-	a->sf = make_new_soundfile(sample->get_source(), get_channels());
-	actions.push_back(a);
-	recording = true;
+	rec_queue.push_back(new recording_t(when, sample, get_channels()));
+	rec_queue.back()->open();
 	disk_thread::unlock();
 }
 
@@ -269,7 +295,6 @@ void process_playback(jack_dport *d, metronome *m, jack_nframes_t nframes)
 
 int audio_engine::process(jack_nframes_t nframes, void *arg)
 {
-	static bool first = true;
 	audio_engine *a = (audio_engine *)arg;
 	metronome *m = a->get_metronome();
 	if(m) m->add_frames(nframes);
@@ -284,7 +309,9 @@ int audio_engine::process(jack_nframes_t nframes, void *arg)
 	cav::slist_mrsw<jack_dport> *pit = g_outputs;
 	while(pit && pit->data()){
 		jack_dport *d = pit->data();
-		if(d->is_playing()) process_playback(d, m, nframes);
+		if(d->is_playing_or_flushing(m)){
+			process_playback(d, m, nframes);
+		}
 		pit = pit->next();
 	}
 
@@ -292,13 +319,7 @@ int audio_engine::process(jack_nframes_t nframes, void *arg)
 	pit = g_inputs;
 	while(pit && pit->data()){
 		jack_dport *d = pit->data();
-		if(!d->is_recording() && first){
-			std::cerr<<"process: [0x"
-				 <<std::hex<<std::setw(4)<<(void*)d
-				 <<std::dec<<"]"<<std::endl;
-			first = false;
-		}
-		if(d->is_recording()) process_recording(d, m, nframes);
+		if(d->is_recording(m)) process_recording(d, m, nframes);
 		pit = pit->next();
 	}
 
@@ -334,7 +355,7 @@ void audio_engine::initialize()
 					    JACK_DEFAULT_AUDIO_TYPE,
 					    JackPortIsOutput, 0);
 
-	if(!diskthread) diskthread = new disk_thread();
+	if(!diskthread) diskthread = new disk_thread(m);
 
 	if(jack_activate(client)){
 		shutdown();

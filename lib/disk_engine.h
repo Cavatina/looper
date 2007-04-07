@@ -8,7 +8,7 @@
 class disk_thread
 {
 public:
-	disk_thread();
+	disk_thread(metronome *m_);
 
 	void run();
 	void halt();
@@ -18,6 +18,8 @@ public:
 	static void lock();
 	static void unlock();
 	static void wake();
+
+	metronome *get_metronome() { return metro; }
 
 private:
 	volatile bool running;

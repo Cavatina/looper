@@ -73,7 +73,6 @@ void signal_init()
 	sa.sa_flags = 0;
 	sigaction(SIGINT, &sa, NULL);               /* Capture CTRL+C            */
 	sigaction(SIGTERM, &sa, NULL);              /* Capture 'kill <our_pid>'  */
-	sigaction(SIGSEGV, &sa, NULL);              /* Capture segmentation fault, for more graceful shutdown  */
 	sigaction(SIGHUP,  &sa, NULL);              /* Capture "Hangup"          */
 	sigaction(SIGILL,  &sa, NULL);
 	sigaction(SIGFPE,  &sa, NULL);

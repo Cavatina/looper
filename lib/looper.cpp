@@ -106,8 +106,7 @@ void looper::run()
 		catch(const command::error &e){
 			std::cerr << e.what() << std::endl;
 		}
-		DBG2(bbtf &t = m.get_current_time();
-		     std::cerr<<t.bar<<"/"<<t.beat<<"/"<<t.tick<<"\r";);
+		DBG2(std::cerr<<(const bbt &)m.get_current_time()<<"\r");
 		usleep(10000);
 	}
 }

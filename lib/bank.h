@@ -41,6 +41,7 @@ public:
 	// record() : Schedule recording (and stop playing)
 	//            If called while recording, schedule stop record.
 	//            (Without scheduling for playback)
+	//            If called when stop recording scheduled, restart record.
 	void record();
 
 	// play_once() : Schedule playback one time.

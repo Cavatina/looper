@@ -3,6 +3,8 @@
 #include "debug.h"
 #include <iostream>
 
+static tempo default_tempo(bbt(1, 1, 0), 120, 4, 4);
+
 metronome::metronome() : running(false), framerate(96000)
 {
 }
@@ -48,15 +50,25 @@ void metronome::add(const tempo &t)
 	tempo_it = tempo_changes.begin();
 }
 
-tempo *metronome::get_current_tempo()
+const tempo *metronome::get_current_tempo()
 {
-	static tempo default_tempo(bbt(1, 1, 0), 120, 4, 4);
 	if(tempo_it == tempo_changes.end()){
 		return &default_tempo;
 	}
-	std::list<tempo>::iterator j = tempo_it; ++j;
-	if(j != tempo_changes.end() && j->when < current_time) tempo_it=j;
+	std::list<tempo>::const_iterator j = tempo_it; ++j;
+	if(j != tempo_changes.end() && j->when <= current_time) tempo_it=j;
 	return &*tempo_it;
+}
+
+const tempo *metronome::get_tempo_at(const bbt &when) const
+{
+	std::list<tempo>::const_iterator j = tempo_changes.begin();
+	for(; j != tempo_changes.end(); ++j){
+		if(j->when <= when){
+			return &*j;
+		}
+	}
+	return &default_tempo;
 }
 
 bbt metronome::next_bar() const
@@ -64,7 +76,13 @@ bbt metronome::next_bar() const
 	return bbt(current_time.bar+1, 1, 0);
 }
 
-uint32_t metronome::get_frames_per_bar(const tempo *t)
+bbt metronome::end_bar(const bbt &start, uint32_t frames) const
+{
+	return bbt(start.bar+ frames/get_frames_per_bar(get_tempo_at(start)),
+		   1, 0);
+}
+
+uint32_t metronome::get_frames_per_bar(const tempo *t) const
 {
 	return (uint32_t)(framerate * 60 * t->beatsperbar / (double)t->bpm);
 }
@@ -84,7 +102,7 @@ void metronome::add_frames(uint32_t delta)
 	if(!running) return;
 	current_time.frame += delta;
 	for(;framerate;){
-		tempo *t = get_current_tempo();
+		const tempo *t = get_current_tempo();
 		if(current_time.frame >= get_frames_per_bar(t)){
 			++current_time.bar;
 			current_time.beat = 1;

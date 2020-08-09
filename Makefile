@@ -36,17 +36,17 @@ INSTALL_PROGRAM = $(INSTALL) #-s
 INSTALL_DATA = $(INSTALL)
 
 looper: $(OBJ)
-	@$(LINK.o) $(OBJ) $(LDFLAGS) -o $@
+	$(LINK.o) $(OBJ) $(LDFLAGS) -o $@
 
 %.o: %.c
-	@$(CC) -MMD $(CFLAGS) -c $< -o $@
+	$(CC) -MMD $(CFLAGS) -c $< -o $@
 	@cp $*.d $*.P; \
 	 sed -e 's/#.*//' -e 's/^[^:]*: *//' -e 's/ *\\$$//' \
 	     -e '/^$$/ d' -e 's/$$/ :/' < $*.d >> $*.P; \
 	 rm -f $*.d
 
 %.o: %.cpp
-	@$(CXX) -MMD $(CFLAGS) -c $< -o $@
+	$(CXX) -MMD $(CFLAGS) -c $< -o $@
 	@cp $*.d $*.P; \
 	 sed -e 's/#.*//' -e 's/^[^:]*: *//' -e 's/ *\\$$//' \
 	     -e '/^$$/ d' -e 's/$$/ :/' < $*.d >> $*.P; \

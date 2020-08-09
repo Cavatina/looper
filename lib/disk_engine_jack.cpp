@@ -162,7 +162,7 @@ void jack_dport::buffer()
 	jack_default_audio_sample_t buf[write_samples];
 	SNDFILE *sf = playback_soundfile();
 	if(!sf || !is_buffering()) stop_playback();
-	else if(sf_readf_float(sf, buf, frames_avail) != frames_avail){
+	else if(sf_readf_float(sf, buf, frames_avail) != (ssize_t)frames_avail){
 		stop_playback();
 	}
 	else if(jack_ringbuffer_write(rb, (const char *) buf, bytecnt)
@@ -186,7 +186,7 @@ void jack_dport::flush()
 
 	SNDFILE *sf = record_soundfile();
 	if(!sf) cancel_record();
-	else if(sf_writef_float(sf, buf, r) != r){
+	else if(sf_writef_float(sf, buf, r) != (ssize_t)r){
 		char errstr[256];
 		sf_error_str(sf, errstr, sizeof(errstr) - 1);
 		std::cerr<<"disk_thread.write <"<<record_soundfile_name()

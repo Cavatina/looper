@@ -5,6 +5,8 @@
 
 #include <stdexcept>
 #include <iostream>
+#include <cstring>
+#include <unistd.h>
 
 #include "util/debug.h"
 #include "util/to_string.h"

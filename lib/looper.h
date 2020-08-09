@@ -4,6 +4,7 @@
 #include <vector>
 #include <string>
 #include <deque>
+#include <memory>
 
 #include "bank.h"
 #include "metronome.h"

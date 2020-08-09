@@ -1,7 +1,9 @@
 targets = looper
 
+EXTERNAL_LIBS := jack libxml-2.0 sndfile soundtouch alsa
 MODULES := lib util lib/util
-CFLAGS := -O2 -ggdb -Wall -pedantic $(EXTRACFLAGS)
+CFLAGS := -O2 -ggdb -Wall -Wno-deprecated -pedantic \
+	  $(shell pkg-config --libs $(EXTERNAL_LIBS)) $(EXTRACFLAGS)
 CFLAGS += $(patsubst %, -I%, $(MODULES))
 
 ALL_OBJ :=
@@ -23,8 +25,7 @@ DEP := $(patsubst %.o,%.P,$(ALL_OBJ))
 ALLFILES := $(SRC)
 
 CPPFLAGS = $(CFLAGS)
-LDFLAGS:=`pkg-config --cflags --libs jack` \
-	 -lsndfile -lSoundTouch -lasound -ggdb $(LIBS)
+LDFLAGS:= -lpthread $(shell pkg-config --libs $(EXTERNAL_LIBS)) -ggdb $(LIBS)
 
 CC = gcc
 CXX = g++
@@ -35,7 +36,7 @@ INSTALL_PROGRAM = $(INSTALL) #-s
 INSTALL_DATA = $(INSTALL)
 
 looper: $(OBJ)
-	@$(LINK.o) $(LDFLAGS) $(OBJ) -o $@
+	@$(LINK.o) $(OBJ) $(LDFLAGS) -o $@
 
 %.o: %.c
 	@$(CC) -MMD $(CFLAGS) -c $< -o $@
